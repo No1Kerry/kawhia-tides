@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kawhia Tides">
+<title>Kawhia Tides</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a1628; color: #e8f4fd; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 1rem; }
+  .widget { width: 100%; max-width: 400px; padding-top: 0.5rem; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
+  .location-name { font-size: 20px; font-weight: 600; color: #e8f4fd; }
+  .location-sub { font-size: 13px; color: #7bafd4; margin-top: 2px; }
+  .clock { font-size: 13px; color: #7bafd4; text-align: right; }
+  .tz-badge { font-size: 11px; background: #1a2e4a; color: #7bafd4; padding: 2px 7px; border-radius: 10px; margin-top: 4px; display: inline-block; }
+  .next-tide { background: #112240; border: 1px solid #1e3a5f; border-radius: 14px; padding: 1rem 1.25rem; margin-bottom: 0.75rem; }
+  .next-label { font-size: 11px; color: #7bafd4; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .next-row { display: flex; align-items: baseline; gap: 10px; }
+  .next-type-high { font-size: 24px; font-weight: 600; color: #5ba3d9; }
+  .next-type-low  { font-size: 24px; font-weight: 600; color: #3db88a; }
+  .next-time { font-size: 24px; font-weight: 600; color: #e8f4fd; }
+  .next-height { font-size: 14px; color: #7bafd4; margin-left: auto; }
+  .countdown { font-size: 13px; color: #7bafd4; margin-top: 5px; }
+  .chart-wrap { position: relative; width: 100%; height: 150px; margin-bottom: 0.75rem; }
+  .toggle-row { display: flex; gap: 6px; margin-bottom: 0.75rem; }
+  .toggle-btn { flex: 1; padding: 7px; font-size: 13px; border: 1px solid #1e3a5f; border-radius: 8px; background: #0a1628; color: #7bafd4; cursor: pointer; transition: all 0.15s; }
+  .toggle-btn.active { background: #112240; color: #e8f4fd; border-color: #5ba3d9; font-weight: 600; }
+  .tide-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 0.75rem; }
+  .tide-item { background: #112240; border: 1px solid #1e3a5f; border-radius: 10px; padding: 10px 12px; }
+  .tide-item.past { opacity: 0.4; }
+  .tide-type-high { font-size: 11px; font-weight: 600; color: #5ba3d9; margin-bottom: 3px; }
+  .tide-type-low  { font-size: 11px; font-weight: 600; color: #3db88a; margin-bottom: 3px; }
+  .tide-time-val { font-size: 17px; font-weight: 600; color: #e8f4fd; }
+  .tide-ht { font-size: 12px; color: #7bafd4; margin-top: 2px; }
+  .footer { font-size: 11px; color: #3d5a73; text-align: center; padding-bottom: 1rem; }
+  .now-dot { display: inline-block; width: 8px; height: 8px; background: #e05555; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="header">
+    <div>
+      <div class="location-name">Te Waitere</div>
+      <div class="location-sub">Kawhia Harbour</div>
+    </div>
+    <div class="clock">
+      <div id="clock"></div>
+      <div><span class="tz-badge" id="tz-badge"></span></div>
+    </div>
+  </div>
+
+  <div class="toggle-row">
+    <button class="toggle-btn active" id="btn12" onclick="setView(12)">12 hours</button>
+    <button class="toggle-btn" id="btn24" onclick="setView(24)">24 hours</button>
+  </div>
+
+  <div class="next-tide">
+    <div class="next-label">next tide</div>
+    <div class="next-row">
+      <span id="next-type"></span>
+      <span class="next-time" id="next-time"></span>
+      <span class="next-height" id="next-height"></span>
+    </div>
+    <div class="countdown" id="countdown"></div>
+  </div>
+
+  <div class="chart-wrap">
+    <canvas id="tideChart" role="img" aria-label="Tide height curve for Kawhia Harbour"></canvas>
+  </div>
+
+  <div class="tide-list" id="tideList"></div>
+  <div class="footer"><span class="now-dot"></span>red dot = current tide level &nbsp;|&nbsp; Kawhia harmonic data</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const KAWHIA = {
+  M2:  { amp: 1.382, phase: 187.3 },
+  S2:  { amp: 0.199, phase: 212.5 },
+  N2:  { amp: 0.281, phase: 165.1 },
+  K1:  { amp: 0.096, phase: 218.4 },
+  O1:  { amp: 0.062, phase: 198.7 },
+  K2:  { amp: 0.056, phase: 214.2 },
+  P1:  { amp: 0.031, phase: 218.0 },
+  MSf: { amp: 0.028, phase: 310.0 }
+};
+const SPEEDS = {
+  M2: 28.9841042, S2: 30.0, N2: 28.4397295,
+  K1: 15.0410686, O1: 13.9430356, K2: 30.0821373,
+  P1: 14.9589314, MSf: 1.0158958
+};
+const EPOCH = Date.UTC(1900, 0, 1);
+const DEG = Math.PI / 180;
+
+function nzOffset(date) {
+  const yr = date.getUTCFullYear();
+  function lastSun(month, fromDay) {
+    const d = new Date(Date.UTC(yr, month, fromDay));
+    d.setUTCDate(fromDay - ((d.getUTCDay() + 7) % 7 === 0 ? 7 : (d.getUTCDay() + 7) % 7));
+    return d;
+  }
+  const start = lastSun(9, 31);
+  const end   = lastSun(3, 31);
+  return (date >= start || date < end) ? 13 * 3600000 : 12 * 3600000;
+}
+
+function tideHeight(date) {
+  const hrs = (date - EPOCH) / 3600000;
+  let h = 0;
+  for (const [k, c] of Object.entries(KAWHIA)) {
+    h += c.amp * Math.cos((SPEEDS[k] * hrs - c.phase) * DEG);
+  }
+  return h + 1.8;
+}
+
+function findExtremes(from, hours) {
+  const step = 2, pts = [];
+  for (let i = 0; i <= hours * 60; i += step) {
+    const t = new Date(from.getTime() + i * 60000);
+    pts.push({ t, h: tideHeight(t) });
+  }
+  const ex = [];
+  for (let i = 1; i < pts.length - 1; i++) {
+    if (pts[i].h >= pts[i-1].h && pts[i].h >= pts[i+1].h) ex.push({ t: pts[i].t, h: pts[i].h, type: 'high' });
+    else if (pts[i].h <= pts[i-1].h && pts[i].h <= pts[i+1].h) ex.push({ t: pts[i].t, h: pts[i].h, type: 'low' });
+  }
+  return ex;
+}
+
+function fmtTime(date) {
+  const off = nzOffset(date);
+  const local = new Date(date.getTime() + off);
+  const h = local.getUTCHours(), m = local.getUTCMinutes();
+  return `${h % 12 || 12}:${String(m).padStart(2,'0')}${h >= 12 ? 'pm' : 'am'}`;
+}
+
+function fmtClock(date) {
+  const off = nzOffset(date);
+  const local = new Date(date.getTime() + off);
+  const h = local.getUTCHours(), m = local.getUTCMinutes(), s = local.getUTCSeconds();
+  return `${h % 12 || 12}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${h >= 12 ? 'pm' : 'am'}`;
+}
+
+function fmtCountdown(ms) {
+  if (ms < 0) return '';
+  const tot = Math.floor(ms / 60000);
+  const h = Math.floor(tot / 60), m = tot % 60;
+  return h > 0 ? `in ${h}h ${m}m` : `in ${m} min`;
+}
+
+let viewHours = 12, chartInst = null;
+
+function setView(h) {
+  viewHours = h;
+  document.getElementById('btn12').classList.toggle('active', h === 12);
+  document.getElementById('btn24').classList.toggle('active', h === 24);
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+  renderAll();
+}
+
+function renderAll() {
+  const now = new Date();
+  const off = nzOffset(now);
+  document.getElementById('clock').textContent = fmtClock(now);
+  document.getElementById('tz-badge').textContent = off === 13 * 3600000 ? 'NZDT UTC+13' : 'NZST UTC+12';
+
+  const extremes = findExtremes(new Date(now.getTime() - 12 * 3600000), 60);
+  const future = extremes.filter(e => e.t > now);
+  const next = future[0];
+
+  if (next) {
+    const el = document.getElementById('next-type');
+    el.textContent = next.type === 'high' ? 'High' : 'Low';
+    el.className = next.type === 'high' ? 'next-type-high' : 'next-type-low';
+    document.getElementById('next-time').textContent = fmtTime(next.t);
+    document.getElementById('next-height').textContent = `${next.h.toFixed(2)}m`;
+    document.getElementById('countdown').textContent = fmtCountdown(next.t - now);
+  }
+
+  const listEl = document.getElementById('tideList');
+  listEl.innerHTML = '';
+  const listEx = extremes.filter(e => e.t >= new Date(now.getTime() - 6 * 3600000) && e.t <= new Date(now.getTime() + viewHours * 3600000));
+  listEx.forEach(e => {
+    const div = document.createElement('div');
+    div.className = `tide-item${e.t < now ? ' past' : ''}`;
+    div.innerHTML = `<div class="tide-type-${e.type}">${e.type === 'high' ? 'High tide' : 'Low tide'}</div>
+      <div class="tide-time-val">${fmtTime(e.t)}</div>
+      <div class="tide-ht">${e.h.toFixed(2)} m</div>`;
+    listEl.appendChild(div);
+  });
+
+  const pts = 200;
+  const windowStart = now;
+  const labels = [], data = [];
+  for (let i = 0; i <= pts; i++) {
+    const t = new Date(windowStart.getTime() + (i / pts) * viewHours * 3600000);
+    labels.push(fmtTime(t));
+    data.push(parseFloat(tideHeight(t).toFixed(3)));
+  }
+  const nowH = parseFloat(tideHeight(now).toFixed(3));
+  const nowData = Array(pts + 1).fill(null);
+  nowData[0] = nowH;
+
+  if (chartInst) {
+    chartInst.data.labels = labels;
+    chartInst.data.datasets[0].data = data;
+    chartInst.data.datasets[1].data = nowData;
+    chartInst.update('none');
+    return;
+  }
+
+  chartInst = new Chart(document.getElementById('tideChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          data,
+          borderColor: '#5ba3d9',
+          borderWidth: 2,
+          fill: true,
+          backgroundColor: 'rgba(91,163,217,0.15)',
+          tension: 0.4,
+          pointRadius: 0
+        },
+        {
+          data: nowData,
+          borderWidth: 0,
+          pointRadius: (ctx) => ctx.dataIndex === 0 ? 6 : 0,
+          pointBackgroundColor: '#e05555',
+          pointBorderColor: '#0a1628',
+          pointBorderWidth: 2,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: {
+          ticks: { maxTicksLimit: viewHours === 12 ? 5 : 7, autoSkip: true, maxRotation: 0, color: '#7bafd4', font: { size: 10 } },
+          grid: { color: 'rgba(91,163,217,0.08)' },
+          border: { display: false }
+        },
+        y: {
+          min: 0, max: 4,
+          ticks: { stepSize: 1, color: '#7bafd4', font: { size: 10 }, callback: v => `${v}m` },
+          grid: { color: 'rgba(91,163,217,0.08)' },
+          border: { display: false }
+        }
+      }
+    }
+  });
+}
+
+renderAll();
+setInterval(renderAll, 1000);
+</script>
+</body>
+</html>
