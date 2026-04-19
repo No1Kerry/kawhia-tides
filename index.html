@@ -141,7 +141,7 @@ function fmtClock(date) {
   const off = nzOffset(date);
   const local = new Date(date.getTime() + off);
   const h = local.getUTCHours(), m = local.getUTCMinutes(), s = local.getUTCSeconds();
-  return `${h % 12 || 12}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${h >= 12 ? 'pm' : 'am'}`;
+  return `${((h - 1 + 24) % 24) % 12 || 12}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${((h - 1 + 24) % 24) >= 12 ? 'pm' : 'am'}`;
 }
 
 function fmtCountdown(ms) {
