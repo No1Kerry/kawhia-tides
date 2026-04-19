@@ -131,17 +131,13 @@ function findExtremes(from, hours) {
 }
 
 function fmtTime(date) {
-  const off = nzOffset(date);
-  const local = new Date(date.getTime() + off);
-  const h = local.getUTCHours(), m = local.getUTCMinutes();
+  const h = date.getHours(), m = date.getMinutes();
   return `${h % 12 || 12}:${String(m).padStart(2,'0')}${h >= 12 ? 'pm' : 'am'}`;
 }
 
 function fmtClock(date) {
-  const off = nzOffset(date);
-  const local = new Date(date.getTime() + off);
-  const h = local.getUTCHours(), m = local.getUTCMinutes(), s = local.getUTCSeconds();
-  return `${((h - 1 + 24) % 24) % 12 || 12}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${((h - 1 + 24) % 24) >= 12 ? 'pm' : 'am'}`;
+  const h = date.getHours(), m = date.getMinutes(), s = date.getSeconds();
+  return `${h % 12 || 12}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${h >= 12 ? 'pm' : 'am'}`;
 }
 
 function fmtCountdown(ms) {
@@ -165,6 +161,7 @@ function renderAll() {
   const now = new Date();
   const off = nzOffset(now);
   document.getElementById('clock').textContent = fmtClock(now);
+  const off = nzOffset(now);
   document.getElementById('tz-badge').textContent = off === 13 * 3600000 ? 'NZDT UTC+13' : 'NZST UTC+12';
 
   const extremes = findExtremes(new Date(now.getTime() - 12 * 3600000), 60);
